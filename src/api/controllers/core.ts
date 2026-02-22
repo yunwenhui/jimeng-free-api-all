@@ -28,6 +28,8 @@ export const USER_ID = util.uuid(false);
 const MAX_RETRY_COUNT = 3;
 // 重试延迟
 const RETRY_DELAY = 5000;
+// 默认SessionID（从环境变量读取，支持逗号分隔多个账号）
+const DEFAULT_SESSIONID = process.env.JIMENG_SESSIONID || '';
 // 伪装headers
 const FAKE_HEADERS = {
   Accept: "application/json, text/plain, */*",
@@ -116,10 +118,7 @@ export async function getCredit(refreshToken: string) {
   } = await request("POST", "/commerce/v1/benefits/user_credit", refreshToken, {
     data: {},
     headers: {
-      // Cookie: 'x-web-secsdk-uid=ef44bd0d-0cf6-448c-b517-fd1b5a7267ba; s_v_web_id=verify_m4b1lhlu_DI8qKRlD_7mJJ_4eqx_9shQ_s8eS2QLAbc4n; passport_csrf_token=86f3619c0c4a9c13f24117f71dc18524; passport_csrf_token_default=86f3619c0c4a9c13f24117f71dc18524; n_mh=9-mIeuD4wZnlYrrOvfzG3MuT6aQmCUtmr8FxV8Kl8xY; sid_guard=a7eb745aec44bb3186dbc2083ea9e1a6%7C1733386629%7C5184000%7CMon%2C+03-Feb-2025+08%3A17%3A09+GMT; uid_tt=59a46c7d3f34bda9588b93590cca2e12; uid_tt_ss=59a46c7d3f34bda9588b93590cca2e12; sid_tt=a7eb745aec44bb3186dbc2083ea9e1a6; sessionid=a7eb745aec44bb3186dbc2083ea9e1a6; sessionid_ss=a7eb745aec44bb3186dbc2083ea9e1a6; is_staff_user=false; sid_ucp_v1=1.0.0-KGRiOGY2ODQyNWU1OTk3NzRhYTE2ZmZhYmFjNjdmYjY3NzRmZGRiZTgKHgjToPCw0cwbEIXDxboGGJ-tHyAMMITDxboGOAhAJhoCaGwiIGE3ZWI3NDVhZWM0NGJiMzE4NmRiYzIwODNlYTllMWE2; ssid_ucp_v1=1.0.0-KGRiOGY2ODQyNWU1OTk3NzRhYTE2ZmZhYmFjNjdmYjY3NzRmZGRiZTgKHgjToPCw0cwbEIXDxboGGJ-tHyAMMITDxboGOAhAJhoCaGwiIGE3ZWI3NDVhZWM0NGJiMzE4NmRiYzIwODNlYTllMWE2; store-region=cn-gd; store-region-src=uid; user_spaces_idc={"7444764277623653426":"lf"}; ttwid=1|cxHJViEev1mfkjntdMziir8SwbU8uPNVSaeh9QpEUs8|1733966961|d8d52f5f56607427691be4ac44253f7870a34d25dd05a01b4d89b8a7c5ea82ad; _tea_web_id=7444838473275573797; fpk1=fa6c6a4d9ba074b90003896f36b6960066521c1faec6a60bdcb69ec8ddf85e8360b4c0704412848ec582b2abca73d57a; odin_tt=efe9dc150207879b88509e651a1c4af4e7ffb4cfcb522425a75bd72fbf894eda570bbf7ffb551c8b1de0aa2bfa0bd1be6c4157411ecdcf4464fcaf8dd6657d66',
       Referer: "https://jimeng.jianying.com/ai-tool/image/generate",
-      // "Device-Time": 1733966964,
-      // Sign: "f3dbb824b378abea7c03cbb152b3a365"
     }
   });
   logger.info(`\n积分信息: \n赠送积分: ${gift_credit}, 购买积分: ${purchase_credit}, VIP积分: ${vip_credit}`);
@@ -169,7 +168,7 @@ export async function request(
   const sign = util.md5(
     `9e2c|${uri.slice(-7)}|${PLATFORM_CODE}|${VERSION_CODE}|${deviceTime}||11ac`
   );
-  
+
   const fullUrl = `https://jimeng.jianying.com${uri}`;
   const requestParams = {
     aid: DEFAULT_ASSISTANT_ID,
@@ -182,7 +181,7 @@ export async function request(
     aigc_features: "app_lip_sync",
     ...(options.params || {}),
   };
-  
+
   const headers = {
     ...FAKE_HEADERS,
     Cookie: generateCookie(token),
@@ -191,16 +190,16 @@ export async function request(
     "Sign-Ver": "1",
     ...(options.headers || {}),
   };
-  
+
   logger.info(`发送请求: ${method.toUpperCase()} ${fullUrl}`);
   logger.info(`请求参数: ${JSON.stringify(requestParams)}`);
   logger.info(`请求数据: ${JSON.stringify(options.data || {})}`);
-  
+
   // 添加重试逻辑
   let retries = 0;
   const maxRetries = 3; // 最大重试次数
   let lastError = null;
-  
+
   while (retries <= maxRetries) {
     try {
       if (retries > 0) {
@@ -208,7 +207,7 @@ export async function request(
         // 重试前等待一段时间
         await new Promise(resolve => setTimeout(resolve, 1000 * retries));
       }
-      
+
       const response = await axios.request({
         method,
         url: fullUrl,
@@ -218,18 +217,18 @@ export async function request(
         validateStatus: () => true, // 允许任何状态码
         ..._.omit(options, "params", "headers"),
       });
-      
+
       // 记录响应状态和头信息
       logger.info(`响应状态: ${response.status} ${response.statusText}`);
-      
+
       // 流式响应直接返回response
       if (options.responseType == "stream") return response;
-      
+
       // 记录响应数据摘要
-      const responseDataSummary = JSON.stringify(response.data).substring(0, 500) + 
+      const responseDataSummary = JSON.stringify(response.data).substring(0, 500) +
         (JSON.stringify(response.data).length > 500 ? "..." : "");
       logger.info(`响应数据摘要: ${responseDataSummary}`);
-      
+
       // 检查HTTP状态码
       if (response.status >= 400) {
         logger.warn(`HTTP错误: ${response.status} ${response.statusText}`);
@@ -238,26 +237,26 @@ export async function request(
           continue;
         }
       }
-      
+
       return checkResult(response);
     }
     catch (error) {
       lastError = error;
       logger.error(`请求失败 (尝试 ${retries + 1}/${maxRetries + 1}): ${error.message}`);
-      
+
       // 如果是网络错误或超时，尝试重试
-      if ((error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || 
-           error.message.includes('timeout') || error.message.includes('network')) && 
+      if ((error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' ||
+           error.message.includes('timeout') || error.message.includes('network')) &&
           retries < maxRetries) {
         retries++;
         continue;
       }
-      
+
       // 其他错误直接抛出
       break;
     }
   }
-  
+
   // 所有重试都失败了，抛出最后一个错误
   logger.error(`请求失败，已重试 ${retries} 次: ${lastError.message}`);
   if (lastError.response) {
@@ -266,7 +265,7 @@ export async function request(
   }
    throw lastError;
  }
- 
+
  /**
   * 预检查文件URL有效性
   *
@@ -309,7 +308,7 @@ export async function uploadFile(
 ) {
   try {
     logger.info(`开始上传文件: ${fileUrl}, 视频图像模式: ${isVideoImage}`);
-    
+
     // 预检查远程文件URL可用性
     await checkFileUrl(fileUrl);
 
@@ -339,12 +338,12 @@ export async function uploadFile(
     // 获取文件的MIME类型
     mimeType = mimeType || mime.getType(filename);
     logger.info(`文件MIME类型: ${mimeType}`);
-    
+
     // 构建FormData
     const formData = new FormData();
     const blob = new Blob([fileData], { type: mimeType });
     formData.append('file', blob, filename);
-    
+
     // 获取上传凭证
     logger.info(`请求上传凭证，场景: ${isVideoImage ? 'video_cover' : 'aigc_image'}`);
     const uploadProofUrl = 'https://imagex.bytedanceapi.com/';
@@ -360,18 +359,18 @@ export async function uploadFile(
         }
       }
     );
-    
+
     if (!proofResult || !proofResult.proof_info) {
       logger.error(`获取上传凭证失败: ${JSON.stringify(proofResult)}`);
       throw new APIException(EX.API_REQUEST_FAILED, '获取上传凭证失败');
     }
-    
+
     logger.info(`获取上传凭证成功`);
-    
+
     // 上传文件
     const { proof_info } = proofResult;
     logger.info(`开始上传文件到: ${uploadProofUrl}`);
-    
+
     const uploadResult = await axios.post(
       uploadProofUrl,
       formData,
@@ -385,22 +384,22 @@ export async function uploadFile(
         validateStatus: () => true, // 允许任何状态码以便详细处理
       }
     );
-    
+
     logger.info(`上传响应状态: ${uploadResult.status}`);
-    
+
     if (!uploadResult || uploadResult.status !== 200) {
       logger.error(`上传文件失败: 状态码 ${uploadResult?.status}, 响应: ${JSON.stringify(uploadResult?.data)}`);
       throw new APIException(EX.API_REQUEST_FAILED, `上传文件失败: 状态码 ${uploadResult?.status}`);
     }
-    
+
     // 验证 proof_info.image_uri 是否存在
     if (!proof_info.image_uri) {
       logger.error(`上传凭证中缺少 image_uri: ${JSON.stringify(proof_info)}`);
       throw new APIException(EX.API_REQUEST_FAILED, '上传凭证中缺少 image_uri');
     }
-    
+
     logger.info(`文件上传成功: ${proof_info.image_uri}`);
-    
+
     // 返回上传结果
     return {
       image_uri: proof_info.image_uri,
@@ -429,10 +428,30 @@ export function checkResult(result: AxiosResponse) {
 /**
  * Token切分
  *
- * @param authorization 认证字符串
+ * 支持从请求头或环境变量获取sessionid
+ * 优先级：请求头 > 环境变量 JIMENG_SESSIONID
+ *
+ * 环境变量支持逗号分隔多个sessionid，实现多账号轮询
+ *
+ * @param authorization 认证字符串（可选）
  */
-export function tokenSplit(authorization: string) {
-  return authorization.replace("Bearer ", "").split(",");
+export function tokenSplit(authorization?: string) {
+  // 优先使用请求头中的token
+  if (authorization) {
+    return authorization.replace("Bearer ", "").split(",");
+  }
+
+  // 如果请求头没有token，使用环境变量中的默认sessionid
+  if (DEFAULT_SESSIONID) {
+    logger.info('使用环境变量 JIMENG_SESSIONID 中的默认 sessionid');
+    return DEFAULT_SESSIONID.split(",").map(s => s.trim()).filter(s => s);
+  }
+
+  // 既没有请求头也没有环境变量，抛出异常
+  throw new APIException(
+    EX.API_REQUEST_FAILED,
+    '未提供 sessionid。请通过请求头 Authorization 或环境变量 JIMENG_SESSIONID 设置'
+  );
 }
 
 /**
